@@ -1,38 +1,56 @@
 # South Pole Mission Evaluator
 
-A React + TypeScript lunar mission planning dashboard for comparing potential landing sites around the Moon's south pole. The app simulates solar and Earth geometry, tracks power and communications constraints, and compares candidate landing-site viability using a data-driven mission-planning workflow.
+A React + TypeScript lunar mission planning dashboard for comparing candidate landing sites around the Moon's south pole. The app evaluates solar illumination, Earth visibility, terrain constraints, and communications windows to help rapid mission trade studies for lunar polar exploration.
 
-## Overview
+## Why this project?
 
-This project models the lighting and communications environment for multiple lunar landing sites and visualizes how each site changes over time. It is designed for rapid comparison of candidate locations for lunar south-pole missions, with emphasis on long-duration illumination, Earth visibility, and terrain hazards.
+Mission planners and researchers need a fast way to compare candidate south-pole landing sites before committing to deeper analyses. This tool visualizes key environmental constraints over a 30-day mission timeline, including:
 
-- Solar elevation and azimuth
-- Earth elevation and visibility
-- Power efficiency estimates
-- Direct-to-Earth (DTE) communications windows
-- Terrain and horizon constraints
-- PSR / ice-trap risk indicators
+- Solar illumination and shadowing
+- Earth-rise / Earth-set visibility windows
+- Direct-to-Earth communications opportunities
+- Terrain, horizon, and local shadow risk
+- Power-generation suitability for solar arrays
+- Candidate landing-site comparison for Artemis-style polar missions
 
-## NASA Data & Ephemeris Provenance
+## NASA Data and Mission Provenance
 
-This project explicitly uses NASA open-data references and lunar mission context to ground the site catalog and analytical engine in real lunar mission planning data:
+This project explicitly incorporates NASA open-data sources and mission-planning references used in lunar south-pole exploration studies:
 
-- Topography & Landing Site Coordinates: Derived and verified using NASA LRO QuickMap (Arizona State University / NASA Lunar Reconnaissance Orbiter Camera) and NASA Moon Trek (Lunar Orbiter Laser Altimeter / LOLA elevation datasets).
-- Ephemeris & Celestial Mechanics: Client-side analytical propagation based on Meeus Astronomical Algorithms and the ELP-2000/82 lunar series, benchmarked against NASA JPL Horizons topocentric lunar ephemerides.
-- Mission Architecture Context: Canadian Space Agency (CSA) Moon Exploration Portal and NASA Artemis South Pole exploration documentation, including Artemis III candidate landing regions and related south-pole mission planning references.
-- Curated site assumptions: Landing-site coordinates and terrain profiles are treated as mission-planning approximations based on NASA LRO topography, not as flight-certified real-time navigation products.
+- Topography and landing site coordinates: derived and cross-checked using NASA LRO QuickMap (Arizona State University / NASA Lunar Reconnaissance Orbiter Camera) and NASA Moon Trek (Lunar Orbiter Laser Altimeter / LOLA elevation datasets).
+- Celestial mechanics and ephemeris: analytical propagation uses Meeus Astronomical Algorithms and the ELP-2000/82 lunar series, benchmarked against NASA JPL Horizons topocentric lunar ephemerides.
+- Mission architecture context: informed by the Canadian Space Agency (CSA) Moon Exploration Portal and NASA Artemis South Pole exploration documentation, including Artemis III candidate landing regions and related lunar polar site assessments.
+- Data usage note: curated landing-site coordinates and terrain profiles are developed as planning approximations grounded in NASA lunar topography and ephemeris references, not as flight-certified navigation data.
 
 ## Features
 
-- Compare two landing sites side by side
-- Choose from curated south-pole landing locations
-- Override coordinates with custom site inputs
-- Animate site conditions across a 30-day time window
-- View 3D lunar terrain rendering for each location
-- Export comparison data as CSV
-- Flag low-illumination or hazardous polar zones
+- Side-by-side comparison of two candidate landing sites
+- Curated south-pole landing site catalog
+- Custom latitude/longitude override inputs
+- 30-day animated mission timeline
+- 3D lunar terrain visualization for each site
+- CSV export of comparison results
+- Risk flags for low-illumination and hazardous polar terrain zones
+- Solar and communications summaries for each site
 
-## Tech Stack
+## Example use cases
+
+- Compare candidate sites for throughput and power availability
+- Review lighting duration around the lunar terminator
+- Identify communication blackout periods for Earth contact
+- Estimate terrain-driven visibility and shadow risk
+- Perform quick concept studies during pre-landing site selection
+
+## System overview
+
+The evaluator combines:
+
+- Lunar surface geometry and solar vector calculations
+- Earth visibility and direct-to-Earth line-of-sight analysis
+- Horizon masking using terrain profiles
+- Mission timeline analysis over multiple days
+
+## Tech stack
 
 - React 18
 - TypeScript
@@ -41,21 +59,21 @@ This project explicitly uses NASA open-data references and lunar mission context
 - Three.js
 - Lucide React
 
-## Project Structure
+## Project structure
 
 ```text
 src/
-  App.tsx                # Main mission comparison interface
+  App.tsx                 # Mission comparison interface
   components/
-    LunarTerrain3D.tsx   # 3D terrain visualization
+    LunarTerrain3D.tsx    # 3D terrain visualization
   data/
-    sites.ts             # Landing site definitions and terrain profiles
+    sites.ts              # Curated landing-site definitions
   utils/
-    astronomyEngine.ts   # Solar/Earth geometry calculations
-  index.css              # Global styling
+    astronomyEngine.ts    # Solar/Earth geometry calculations
+  index.css               # Global styling
 ```
 
-## Getting Started
+## Getting started
 
 ### Prerequisites
 
@@ -74,7 +92,7 @@ npm install
 npm run dev
 ```
 
-Then open the local URL shown in the terminal, typically:
+Then open the local URL shown in the terminal, usually:
 
 ```text
 http://localhost:5173
@@ -92,19 +110,28 @@ npm run build
 npm run lint
 ```
 
-## Mission Evaluation Logic
+## Mission evaluation logic
 
-The evaluator computes site metrics using lunar ephemeris and local horizon geometry. Key outputs include:
+The evaluator performs a lightweight lunar situational analysis using local horizon geometry and ephemeris-derived vectors. Key outputs include:
 
-- Sunlit vs shadowed conditions
-- Approximate power generation efficiency
-- Earth visibility windows for communications
-- Site viability over a multi-day mission timeline
+- Sunlit vs. shadowed conditions
+- Approximate solar array power efficiency
+- Earth visibility windows and communication opportunities
+- Multi-day site viability metrics over a mission timeline
+- Terrain hazard and PSR / ice-trap risk indicators
 
-## Notes
+## Accuracy and limitations
 
-This application is intended as a mission-planning visualization tool and is best suited for early concept analysis, trade studies, and educational exploration of lunar south-pole landing conditions. It is not a substitute for flight dynamics, mission operations software, or NASA-certified navigation analysis.
+This application is intended for rapid concept analysis, trade studies, and educational exploration of lunar south-pole landing conditions. It is not a substitute for flight dynamics software, precision navigation products, or official mission operations analysis.
 
 ## License
 
 This project is currently unlicensed unless otherwise specified by the repository owner.
+
+## Future enhancements
+
+- Additional landing-site datasets and filters
+- More detailed power and thermal modeling
+- Mission duration optimization tools
+- Multi-site ranking and scoring
+- Expanded lunar terrain and shadow analytics
