@@ -1,4 +1,4 @@
-# South Pole Mission Evaluator
+# Lunar South Pole Mission Evaluator
 
 A React + TypeScript lunar mission planning dashboard for comparing candidate landing sites around the Moon's south pole. The app evaluates solar illumination, Earth visibility, terrain constraints, and communications windows to help rapid mission trade studies for lunar polar exploration.
 
