@@ -9,12 +9,16 @@ const HOUR = 3_600_000
 const MAX_HOURS = 720
 const CUSTOM_HORIZON_PROFILE: number[] = []
 const isPsrIceTrap = (site: LandingSite) => site.elevationMeters <= -1000 || Math.max(...site.horizonProfile) > 5
+const horizonForSite = (site: LandingSite): number[] | undefined => site.id === 'custom' ? undefined : site.horizonProfile
+const calculateSiteVectors = (site: LandingSite, timestamp: Date) =>
+  calculateLunarVectors(site.lat, site.lon, timestamp, horizonForSite(site))
+
 const summarizeSite = (site: LandingSite) => {
   let power = 0
   let comms = 0
   let continuousPowerHours = 0
   for (let hour = 0; hour <= MAX_HOURS; hour += 1) {
-    const vectors = calculateLunarVectors(site.lat, site.lon, new Date(START + hour * HOUR), site.horizonProfile)
+    const vectors = calculateSiteVectors(site, new Date(START + hour * HOUR))
     power += vectors.solarPowerEfficiency
     comms += Number(vectors.dteCommsActive)
     continuousPowerHours += Number(vectors.isSunlit)
@@ -43,7 +47,7 @@ function App() {
   const a = customA ? {...siteA,id:'custom',lat:customA.lat,lon:customA.lon,elevationMeters:0,horizonProfile:CUSTOM_HORIZON_PROFILE,name:`${siteA.name} · Custom`} : siteA
   const b = customB ? {...siteB,id:'custom',lat:customB.lat,lon:customB.lon,elevationMeters:0,horizonProfile:CUSTOM_HORIZON_PROFILE,name:`${siteB.name} · Custom`} : siteB
   const sa=useMemo(()=>summarizeSite(a),[a.lat,a.lon,a.horizonProfile]), sb=useMemo(()=>summarizeSite(b),[b.lat,b.lon,b.horizonProfile])
-  const exportCsv=()=>{const rows=[['UTC','A Solar Elevation','A Earth Elevation','A Power Efficiency %','A Comms','B Solar Elevation','B Earth Elevation','B Power Efficiency %','B Comms']];for(let h=0;h<=MAX_HOURS;h++){const t=new Date(START+h*HOUR),x=calculateLunarVectors(a.lat,a.lon,t,a.horizonProfile),y=calculateLunarVectors(b.lat,b.lon,t,b.horizonProfile);rows.push([t.toISOString(),x.sunElevation.toFixed(4),x.earthElevation.toFixed(4),x.solarPowerEfficiency.toFixed(2),x.dteCommsActive?'LOCKED':'BLACKOUT',y.sunElevation.toFixed(4),y.earthElevation.toFixed(4),y.solarPowerEfficiency.toFixed(2),y.dteCommsActive?'LOCKED':'BLACKOUT'])}const url=URL.createObjectURL(new Blob([rows.map(r=>r.join(',')).join('\r\n')],{type:'text/csv'}));const link=document.createElement('a');link.href=url;link.download='lunar-navigators-30-day-log.csv';link.click();URL.revokeObjectURL(url)}
+  const exportCsv=()=>{const rows=[['UTC','A Solar Elevation','A Earth Elevation','A Power Efficiency %','A Comms','B Solar Elevation','B Earth Elevation','B Power Efficiency %','B Comms']];for(let h=0;h<=MAX_HOURS;h++){const t=new Date(START+h*HOUR),x=calculateSiteVectors(a,t),y=calculateSiteVectors(b,t);rows.push([t.toISOString(),x.sunElevation.toFixed(4),x.earthElevation.toFixed(4),x.solarPowerEfficiency.toFixed(2),x.dteCommsActive?'LOCKED':'BLACKOUT',y.sunElevation.toFixed(4),y.earthElevation.toFixed(4),y.solarPowerEfficiency.toFixed(2),y.dteCommsActive?'LOCKED':'BLACKOUT'])}const url=URL.createObjectURL(new Blob([rows.map(r=>r.join(',')).join('\r\n')],{type:'text/csv'}));const link=document.createElement('a');link.href=url;link.download='lunar-navigators-30-day-log.csv';link.click();URL.revokeObjectURL(url)}
 
   return <main className="min-h-screen bg-slate-950 pb-36 text-slate-100">
     <header className="border-b border-slate-800 px-5 py-5 lg:px-10"><div className="mx-auto flex max-w-[1440px] items-center justify-between"><div><p className="text-[10px] font-bold tracking-[.22em] text-cyan-300">THE LUNAR NAVIGATORS</p><h1 className="mt-1 text-xl font-semibold">South Pole Mission Evaluator</h1></div><button onClick={exportCsv} className="flex items-center gap-2 rounded-lg border border-cyan-400/40 bg-cyan-400/10 px-3 py-2 text-xs text-cyan-200"><Download size={14}/> Export 30-day CSV</button></div></header>
@@ -60,7 +64,7 @@ function SiteCard({label,site,timestamp,siteId,setSiteId,custom,setCustom}:{labe
   const [lat,setLat]=useState(String(site.lat));const [lon,setLon]=useState(String(site.lon))
   const [customError,setCustomError]=useState('')
   useEffect(()=>{setLat(String(site.lat));setLon(String(site.lon))},[site.id,site.lat,site.lon])
-  const vectors=useMemo(()=>calculateLunarVectors(site.lat,site.lon,timestamp,site.horizonProfile),[site,timestamp])
+  const vectors=useMemo(()=>calculateSiteVectors(site,timestamp),[site,timestamp])
   const countdown=(hours:number|null)=>hours===null?'—':`${Math.floor(hours)}h ${String(Math.round((hours%1)*60)).padStart(2,'0')}m`
   const applyCustomCoordinates=()=>{
     const latitude=lat.trim()===''?NaN:Number(lat)
