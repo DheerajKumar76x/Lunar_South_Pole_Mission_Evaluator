@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import type { LandingSite } from '../data/sites'
 
@@ -36,6 +36,7 @@ export function LunarTerrain3D({ site, sunAzimuth, sunElevation, earthAzimuth, e
   const containerRef = useRef<HTMLDivElement>(null)
   const lightingRef = useRef<Lighting>({ sunAzimuth, sunElevation, earthAzimuth, earthElevation })
   const updateLightingRef = useRef<((lighting: Lighting) => void) | null>(null)
+  const [webglMessage, setWebglMessage] = useState('')
   lightingRef.current = { sunAzimuth, sunElevation, earthAzimuth, earthElevation }
 
   useEffect(() => {
@@ -43,12 +44,20 @@ export function LunarTerrain3D({ site, sunAzimuth, sunElevation, earthAzimuth, e
     if (!container) return
 
     const scene = new THREE.Scene()
-    scene.background = new THREE.Color('#020617')
-    scene.fog = new THREE.Fog('#020617', 13, 32)
+    scene.background = new THREE.Color('#06080b')
+    scene.fog = new THREE.Fog('#06080b', 13, 32)
     const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 100)
     camera.position.set(8, 7, 10)
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false })
+    let renderer: THREE.WebGLRenderer
+    try {
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false })
+    } catch (error) {
+      console.error('Unable to initialize the lunar terrain WebGL renderer.', error)
+      setWebglMessage('3D VIEW UNAVAILABLE · ENABLE WEBGL OR RELOAD')
+      return
+    }
+    setWebglMessage('')
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5))
     renderer.shadowMap.enabled = true
     renderer.shadowMap.type = THREE.PCFShadowMap
@@ -59,7 +68,7 @@ export function LunarTerrain3D({ site, sunAzimuth, sunElevation, earthAzimuth, e
 
     const ambient = new THREE.HemisphereLight('#cbd5e1', '#111827', 1.05)
     scene.add(ambient)
-    const sunLight = new THREE.DirectionalLight('#fff1cf', 2.8)
+    const sunLight = new THREE.DirectionalLight('#f59e0b', 2.8)
     sunLight.castShadow = true
     sunLight.shadow.mapSize.set(1024, 1024)
     sunLight.shadow.camera.left = -9
@@ -72,31 +81,34 @@ export function LunarTerrain3D({ site, sunAzimuth, sunElevation, earthAzimuth, e
     const terrainGroup = new THREE.Group()
     scene.add(terrainGroup)
     const size = 16
-    const segments = 88
+    const lowCapability = (navigator.hardwareConcurrency || 4) < 4 || window.matchMedia('(max-width: 1023px)').matches
+    const segments = lowCapability ? 64 : 112
     const geometry = new THREE.PlaneGeometry(size, size, segments, segments)
     geometry.rotateX(-Math.PI / 2)
     const positions = geometry.attributes.position as THREE.BufferAttribute
-    const profile = site.horizonProfile.length ? site.horizonProfile : Array(36).fill(0)
+    const isCustomPlain = site.id === 'custom' || !site.horizonProfile || site.horizonProfile.length === 0
+    const profile = site.horizonProfile?.length ? site.horizonProfile : Array(36).fill(0)
     const interpolateHorizon = (azimuth: number) => {
       const index = ((azimuth % 360) + 360) % 360 / 10
       const a = Math.floor(index) % profile.length
       const b = (a + 1) % profile.length
       return THREE.MathUtils.lerp(profile[a], profile[b], index - Math.floor(index))
     }
-    const isCrater = /haworth/i.test(site.id)
-    const craterScale = isCrater ? 1 : /malapert/i.test(site.id) ? -0.55 : -0.15
+    const isCrater = !isCustomPlain && /haworth/i.test(site.id)
+    const craterScale = isCustomPlain ? 0 : isCrater ? 1 : /malapert/i.test(site.id) ? -0.55 : -0.15
     const baseElevation = THREE.MathUtils.clamp(site.elevationMeters / 5000, -0.45, 1) * 0.5
     for (let i = 0; i < positions.count; i += 1) {
       const x = positions.getX(i)
       const z = positions.getZ(i)
       const radius = Math.hypot(x, z)
       const azimuth = (Math.atan2(x, z) * 180 / Math.PI + 360) % 360
-      const horizonHeight = Math.tan(toRadians(interpolateHorizon(azimuth))) * size * 0.32
+      const horizonHeight = isCustomPlain ? 0 : Math.tan(toRadians(interpolateHorizon(azimuth))) * size * 0.32
+      const impactCrater = isCustomPlain ? [-1.1, -0.8, -0.55, -0.35].reduce((sum, depth, index) => { const cx=[-4.2,3.4,1.1,-2.1][index], cz=[2.8,-2.5,5.1,-5.3][index], cr=[1.2,1.55,0.8,0.65][index]; const d=Math.hypot(x-cx,z-cz); return sum + depth*Math.exp(-((d/cr)**2)) + 0.22*Math.exp(-(((d-cr*1.35)/(cr*.22))**2)) },0) : 0
       const craterBowl = isCrater ? -2.5 * Math.exp(-((radius / 3.1) ** 2)) + 1.35 * Math.exp(-(((radius - 5.5) / 1.15) ** 2)) : 0
       const massif = /malapert/i.test(site.id) ? 1.25 * Math.exp(-((radius / 3.5) ** 2)) : 0
       const ridge = /connecting/i.test(site.id) ? 0.45 * Math.sin((x + z) * 0.65) * Math.exp(-radius / 8) : 0
       const noise = 0.12 * Math.sin(x * 2.4 + z * 1.2) * Math.cos(z * 2.8 - x * 0.7) + 0.055 * Math.sin(x * 5.3 + z * 3.7)
-      positions.setY(i, baseElevation + horizonHeight + craterScale * (0.1 * (radius / 8)) + craterBowl + massif + ridge + noise)
+      positions.setY(i, baseElevation + horizonHeight + craterScale * (0.1 * (radius / 8)) + craterBowl + massif + ridge + (isCustomPlain ? impactCrater + noise * 0.12 : noise))
     }
     geometry.computeVertexNormals()
     const surface = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ color: '#666b70', roughness: 0.96, metalness: 0.04, flatShading: true }))
@@ -130,7 +142,7 @@ export function LunarTerrain3D({ site, sunAzimuth, sunElevation, earthAzimuth, e
       return { line, marker }
     }
     const sunRay = addRay('#f59e0b')
-    const earthRay = addRay('#06b6d4')
+    const earthRay = addRay('#38bdf8')
 
     const ground = new THREE.GridHelper(24, 24, '#334155', '#1e293b')
     ground.position.y = -0.8
@@ -197,36 +209,43 @@ export function LunarTerrain3D({ site, sunAzimuth, sunElevation, earthAzimuth, e
     updateLightingRef.current = updateLighting
     updateLighting(lightingRef.current)
 
+    const onContextLost = (event: Event) => {
+      event.preventDefault()
+      updateLightingRef.current = null
+      setWebglMessage('3D CONTEXT LOST · WAITING FOR GPU RESTORE')
+    }
+    const onContextRestored = () => {
+      setWebglMessage('')
+      updateLightingRef.current = updateLighting
+      updateLighting(lightingRef.current)
+    }
+    renderer.domElement.addEventListener('webglcontextlost', onContextLost, false)
+    renderer.domElement.addEventListener('webglcontextrestored', onContextRestored, false)
+
     return () => {
       updateLightingRef.current = null
       resizeObserver.disconnect()
+      renderer.domElement.removeEventListener('webglcontextlost', onContextLost)
+      renderer.domElement.removeEventListener('webglcontextrestored', onContextRestored)
       renderer.domElement.removeEventListener('pointerdown', onPointerDown)
       renderer.domElement.removeEventListener('pointermove', onPointerMove)
       renderer.domElement.removeEventListener('pointerup', onPointerUp)
       renderer.domElement.removeEventListener('pointercancel', onPointerUp)
       renderer.domElement.removeEventListener('wheel', onWheel)
-      terrainGroup.traverse((object) => {
-        if (object instanceof THREE.Mesh || object instanceof THREE.Line) {
-          object.geometry.dispose()
-          const materials = Array.isArray(object.material) ? object.material : [object.material]
-          materials.forEach((material) => material.dispose())
+      const geometries = new Set<THREE.BufferGeometry>()
+      const materials = new Set<THREE.Material>()
+      scene.traverse((object) => {
+        if (object instanceof THREE.Mesh || object instanceof THREE.Line || object instanceof THREE.Points) {
+          geometries.add(object.geometry)
+          const objectMaterials = Array.isArray(object.material) ? object.material : [object.material]
+          objectMaterials.forEach(material => materials.add(material))
         }
       })
-      rayGroup.traverse((object) => {
-        if (object instanceof THREE.Line || object instanceof THREE.Mesh) {
-          object.geometry.dispose()
-          const materials = Array.isArray(object.material) ? object.material : [object.material]
-          materials.forEach((material) => material.dispose())
-        }
-      })
-      beacon.traverse((object) => {
-        if (object instanceof THREE.Mesh) { object.geometry.dispose(); const materials = Array.isArray(object.material) ? object.material : [object.material]; materials.forEach((material) => material.dispose()) }
-      })
-      ground.geometry.dispose()
-      ;(ground.material as THREE.Material).dispose()
-      beaconStem.geometry.dispose()
-      ;(beaconStem.material as THREE.Material).dispose()
+      geometries.forEach(geometry => geometry.dispose())
+      materials.forEach(material => material.dispose())
+      sunLight.shadow.dispose()
       renderer.dispose()
+      renderer.forceContextLoss()
       renderer.domElement.remove()
     }
   }, [site.id, site.lat, site.lon, site.elevationMeters, site.horizonProfile])
@@ -235,5 +254,10 @@ export function LunarTerrain3D({ site, sunAzimuth, sunElevation, earthAzimuth, e
     updateLightingRef.current?.({ sunAzimuth, sunElevation, earthAzimuth, earthElevation })
   }, [sunAzimuth, sunElevation, earthAzimuth, earthElevation])
 
-  return <div ref={containerRef} className={`h-full min-h-[320px] w-full touch-none overflow-hidden rounded-xl ${className ?? ''}`} aria-label={`Interactive 3D lunar terrain for ${site.name}`} />
+  return (
+    <div className={`terrain-canvas h-full min-h-[220px] w-full touch-none overflow-hidden ${className ?? ''}`} aria-label={`Interactive 3D lunar terrain for ${site.name}`}>
+      <div ref={containerRef} className="terrain-canvas__renderer" />
+      {webglMessage && <div className="terrain-context-message" role="status">{webglMessage}</div>}
+    </div>
+  )
 }

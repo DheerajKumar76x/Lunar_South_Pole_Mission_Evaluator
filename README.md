@@ -18,7 +18,7 @@ Mission planners and researchers need a fast way to compare candidate south-pole
 This project explicitly incorporates NASA open-data sources and mission-planning references used in lunar south-pole exploration studies:
 
 - Topography and landing site coordinates: derived and cross-checked using NASA LRO QuickMap (Arizona State University / NASA Lunar Reconnaissance Orbiter Camera) and NASA Moon Trek (Lunar Orbiter Laser Altimeter / LOLA elevation datasets).
-- Celestial mechanics and ephemeris: analytical propagation uses Meeus Astronomical Algorithms and the ELP-2000/82 lunar series, benchmarked against NASA JPL Horizons topocentric lunar ephemerides.
+- Celestial mechanics and ephemeris: preset sites fetch hourly topocentric Sun/Earth samples from NASA JPL Horizons (DE441) once at startup; values between samples are interpolated. Custom coordinates and times outside the cache use the analytical Meeus / principal ELP-2000/82 model.
 - Mission architecture context: informed by the Canadian Space Agency (CSA) Moon Exploration Portal and NASA Artemis South Pole exploration documentation, including Artemis III candidate landing regions and related lunar polar site assessments.
 - Data usage note: curated landing-site coordinates and terrain profiles are developed as planning approximations grounded in NASA lunar topography and ephemeris references, not as flight-certified navigation data.
 
@@ -71,6 +71,9 @@ src/
   utils/
     astronomyEngine.ts    # Solar/Earth geometry calculations
   index.css               # Global styling
+public/
+  data/
+    horizonsCache.json    # Public hourly JPL Horizons samples for preset sites
 ```
 
 ## Getting started
@@ -104,6 +107,16 @@ http://localhost:5173
 npm run build
 ```
 
+### Refresh the JPL Horizons cache
+
+The public cache spans 60 days from November 14, 2026: the 30-day mission timeline plus event-look-ahead coverage. To regenerate it, run:
+
+```bash
+npm run fetch:horizons
+```
+
+This calls the public JPL Horizons API for the five preset site coordinates and writes `public/data/horizonsCache.json`. The app fetches the file once at startup and keeps samples in memory; custom coordinates and out-of-range times use the analytical fallback.
+
 ### Lint the project
 
 ```bash
@@ -112,7 +125,7 @@ npm run lint
 
 ## Mission evaluation logic
 
-The evaluator performs a lightweight lunar situational analysis using local horizon geometry and ephemeris-derived vectors. Key outputs include:
+The evaluator performs a lightweight lunar situational analysis using local horizon geometry and ephemeris-derived vectors. Preset sites use hourly JPL Horizons topocentric azimuth/elevation data with interpolation; custom positions use the analytical model and a flat horizon. Key outputs include:
 
 - Sunlit vs. shadowed conditions
 - Approximate solar array power efficiency

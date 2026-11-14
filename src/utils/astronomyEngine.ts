@@ -86,6 +86,7 @@ export interface LunarVectors {
   earthHorizonLimit: number;
   /** Direct-to-Earth comms line of sight: earthElevation > earthHorizonLimit. */
   dteCommsActive: boolean;
+  ephemerisSource: string;
   /** Hours until the next sunrise/sunset (state change of isSunlit); null if none within 720 h. */
   hoursToNextSunEvent: number | null;
   /** Hours until the next Earthrise/Earthset (state change of dteCommsActive); null if none within 720 h. */
@@ -118,6 +119,108 @@ export interface SelenographicPoints {
   earthMoonDistanceKm: number;
   /** Moon-Sun distance (km). */
   moonSunDistanceKm: number;
+}
+
+interface EphemerisPoint {
+  time: string;
+  sun: { azimuth: number; elevation: number };
+  earth: { azimuth: number; elevation: number };
+}
+
+export interface EphemerisData {
+  sun: { azimuth: number; elevation: number };
+  earth: { azimuth: number; elevation: number };
+  source: string;
+}
+
+const HORIZONS_SOURCE = 'JPL Horizons (DE441), hourly interpolated cache';
+const HOUR_MS = 3_600_000;
+let horizonsCache = new Map<string, Map<number, EphemerisPoint>>();
+let horizonsCachePromise: Promise<void> | null = null;
+
+function interpolateAngle(start: number, end: number, fraction: number): number {
+  const difference = ((end - start + 540) % 360) - 180;
+  return norm360(start + difference * fraction);
+}
+
+/** Fetch and validate the static Horizons cache once per page load. */
+export function initializeEphemerisCache(): Promise<void> {
+  if (!horizonsCachePromise) {
+    horizonsCachePromise = fetch('/data/horizonsCache.json')
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error(`Failed to load Horizons cache: HTTP ${response.status}`);
+        }
+        return response.json() as Promise<unknown>;
+      })
+      .then((payload) => {
+        if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+          throw new Error('Horizons cache has an invalid top-level format');
+        }
+
+        const nextCache = new Map<string, Map<number, EphemerisPoint>>();
+        for (const [siteId, rawPoints] of Object.entries(payload)) {
+          if (!Array.isArray(rawPoints) || rawPoints.length === 0) {
+            throw new Error(`Horizons cache has no samples for ${siteId}`);
+          }
+          const siteCache = new Map<number, EphemerisPoint>();
+          let previousTime = -Infinity;
+          for (const rawPoint of rawPoints) {
+            if (!rawPoint || typeof rawPoint !== 'object') {
+              throw new Error(`Horizons cache contains an invalid sample for ${siteId}`);
+            }
+            const point = rawPoint as EphemerisPoint;
+            const time = Date.parse(point.time);
+            const hasValidVector = (vector: EphemerisPoint['sun']) =>
+              vector && Number.isFinite(vector.azimuth) && Number.isFinite(vector.elevation);
+            if (
+              !Number.isFinite(time) ||
+              (previousTime !== -Infinity && time - previousTime !== HOUR_MS) ||
+              !hasValidVector(point.sun) ||
+              !hasValidVector(point.earth)
+            ) {
+              throw new Error(`Horizons cache contains invalid or non-hourly samples for ${siteId}`);
+            }
+            siteCache.set(time, point);
+            previousTime = time;
+          }
+          nextCache.set(siteId, siteCache);
+        }
+        horizonsCache = nextCache;
+      });
+  }
+  return horizonsCachePromise;
+}
+
+/** Returns cached vectors by exact hourly key or interpolation, only inside the cache range. */
+export function getEphemerisData(siteId: string, timestamp: Date): EphemerisData | null {
+  const targetTime = timestamp instanceof Date ? timestamp.getTime() : NaN;
+  if (!Number.isFinite(targetTime)) {
+    throw new RangeError('timestamp must be a valid Date');
+  }
+  const siteCache = horizonsCache.get(siteId);
+  if (!siteCache) return null;
+  const exact = siteCache.get(targetTime);
+  if (exact) return { sun: exact.sun, earth: exact.earth, source: HORIZONS_SOURCE };
+
+  const beforeTime = Math.floor(targetTime / HOUR_MS) * HOUR_MS;
+  const afterTime = beforeTime + HOUR_MS;
+  const before = siteCache.get(beforeTime);
+  const after = siteCache.get(afterTime);
+  if (!before || !after) return null;
+
+  const fraction = (targetTime - beforeTime) / HOUR_MS;
+  return {
+    sun: {
+      azimuth: interpolateAngle(before.sun.azimuth, after.sun.azimuth, fraction),
+      elevation: before.sun.elevation + (after.sun.elevation - before.sun.elevation) * fraction,
+    },
+    earth: {
+      azimuth: interpolateAngle(before.earth.azimuth, after.earth.azimuth, fraction),
+      elevation: before.earth.elevation + (after.earth.elevation - before.earth.elevation) * fraction,
+    },
+    source: HORIZONS_SOURCE,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -512,16 +615,28 @@ export function interpolateHorizonElevation(
 
 type Snapshot = Omit<LunarVectors, 'hoursToNextSunEvent' | 'hoursToNextEarthEvent'>;
 
-function evaluate(lat: number, lon: number, timeMs: number, horizonProfile?: readonly number[]): Snapshot {
-  // Steps 1-4
-  const jdUtc = timeMs / MS_PER_DAY + UNIX_EPOCH_JD;
-  const jdTt = jdUtc + TT_MINUS_UTC_SECONDS / 86400;
-  const T = julianCenturiesFromJ2000(jdTt);
-  const pts = computeSelenographicPoints(T);
-
-  // Step 5
-  const sun = azElFromSubPoint(lat, lon, pts.subSolarLat, pts.subSolarLon, pts.moonSunDistanceKm);
-  const earth = azElFromSubPoint(lat, lon, pts.subEarthLat, pts.subEarthLon, pts.earthMoonDistanceKm);
+function evaluate(
+  lat: number,
+  lon: number,
+  timeMs: number,
+  horizonProfile?: readonly number[],
+  siteId?: string,
+): Snapshot {
+  const cached = siteId ? getEphemerisData(siteId, new Date(timeMs)) : null;
+  let sun: { azimuth: number; elevation: number };
+  let earth: { azimuth: number; elevation: number };
+  if (cached) {
+    sun = cached.sun;
+    earth = cached.earth;
+  } else {
+    // Steps 1-5: analytical fallback for custom sites and timestamps outside the cache.
+    const jdUtc = timeMs / MS_PER_DAY + UNIX_EPOCH_JD;
+    const jdTt = jdUtc + TT_MINUS_UTC_SECONDS / 86400;
+    const T = julianCenturiesFromJ2000(jdTt);
+    const pts = computeSelenographicPoints(T);
+    sun = azElFromSubPoint(lat, lon, pts.subSolarLat, pts.subSolarLon, pts.moonSunDistanceKm);
+    earth = azElFromSubPoint(lat, lon, pts.subEarthLat, pts.subEarthLon, pts.earthMoonDistanceKm);
+  }
 
   // Step 6
   const sunHorizonLimit = interpolateHorizonElevation(horizonProfile, sun.azimuth);
@@ -543,6 +658,7 @@ function evaluate(lat: number, lon: number, timeMs: number, horizonProfile?: rea
     earthElevation: earth.elevation,
     earthHorizonLimit,
     dteCommsActive: earth.elevation > earthHorizonLimit,
+    ephemerisSource: cached?.source ?? 'Analytical lunar model',
   };
 }
 
@@ -582,6 +698,7 @@ export function calculateLunarVectors(
   lon: number,
   timestamp: Date,
   horizonProfile?: number[],
+  siteId?: string,
 ): LunarVectors {
   if (!Number.isFinite(lat) || lat < -90 || lat > 90) {
     throw new RangeError(`lat must be a finite number in [-90, 90], got ${lat}`);
@@ -598,7 +715,7 @@ export function calculateLunarVectors(
   }
 
   const obsLon = norm180(lon);
-  const at = (ms: number): Snapshot => evaluate(lat, obsLon, ms, horizonProfile);
+  const at: (ms: number) => Snapshot = (ms) => evaluate(lat, obsLon, ms, horizonProfile, siteId);
 
   const now = at(t0);
 

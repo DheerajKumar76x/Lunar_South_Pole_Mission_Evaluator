@@ -1,10 +1,63 @@
 @import "tailwindcss";
 
-:root { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-synthesis: none; text-rendering: optimizeLegibility; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; font-optical-sizing: auto; }
-* { box-sizing: border-box; }
-body { margin: 0; min-width: 320px; min-height: 100vh; }
-button, a { -webkit-tap-highlight-color: transparent; }
-.timeline-slider { background: linear-gradient(to right, #22d3ee 0%, #22d3ee calc((var(--value, 14) - 1) / 27 * 100%), #1e293b calc((var(--value, 14) - 1) / 27 * 100%)); }
-.timeline-slider::-webkit-slider-thumb { appearance: none; width: 13px; height: 13px; border-radius: 50%; background: #67e8f9; border: 3px solid #0f172a; box-shadow: 0 0 0 1px #22d3ee, 0 0 12px #22d3ee80; }
-.timeline-slider::-moz-range-thumb { width: 9px; height: 9px; border-radius: 50%; background: #67e8f9; border: 3px solid #0f172a; box-shadow: 0 0 0 1px #22d3ee, 0 0 12px #22d3ee80; }
-::selection { color: #ecfeff; background: #0891b2; }
+:root {
+  font-family: "Space Grotesk", Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #e6edf3;
+  background: #06080b;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-optical-sizing: auto;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-width: 320px;
+  min-height: 100%;
+  background: #06080b;
+  color-scheme: dark;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  overflow-x: hidden;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.numeric {
+  font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+::selection {
+  color: #06080b;
+  background: #f59e0b;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
