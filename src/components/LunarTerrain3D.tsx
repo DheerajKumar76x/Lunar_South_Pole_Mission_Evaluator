@@ -33,10 +33,10 @@ export function LunarTerrain3D({ site, sunAzimuth, sunElevation, earthAzimuth, e
     const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 100)
     camera.position.set(8, 7, 10)
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' })
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false })
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5))
     renderer.shadowMap.enabled = true
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap
+    renderer.shadowMap.type = THREE.PCFShadowMap
     renderer.outputColorSpace = THREE.SRGBColorSpace
     renderer.toneMapping = THREE.ACESFilmicToneMapping
     renderer.toneMappingExposure = 1.15
@@ -142,15 +142,21 @@ export function LunarTerrain3D({ site, sunAzimuth, sunElevation, earthAzimuth, e
       previousX = event.clientX
       previousY = event.clientY
       updateCamera()
+      renderer.render(scene, camera)
     }
     const onPointerUp = () => { dragging = false }
-    const onWheel = (event: WheelEvent) => { distance = THREE.MathUtils.clamp(distance + event.deltaY * 0.01, 8, 24); updateCamera() }
+    const onWheel = (event: WheelEvent) => {
+      distance = THREE.MathUtils.clamp(distance + event.deltaY * 0.01, 8, 24)
+      updateCamera()
+      renderer.render(scene, camera)
+    }
     const resizeObserver = new ResizeObserver(() => {
       const width = Math.max(1, container.clientWidth)
       const height = Math.max(1, container.clientHeight)
       renderer.setSize(width, height, false)
       camera.aspect = width / height
       camera.updateProjectionMatrix()
+      renderer.render(scene, camera)
     })
     resizeObserver.observe(container)
     renderer.domElement.addEventListener('pointerdown', onPointerDown)
@@ -165,12 +171,9 @@ export function LunarTerrain3D({ site, sunAzimuth, sunElevation, earthAzimuth, e
     sunLight.target.position.set(0, beaconY, 0)
     scene.add(sunLight.target)
 
-    let animationFrame = 0
-    const render = () => { renderer.render(scene, camera); animationFrame = window.requestAnimationFrame(render) }
-    render()
+    renderer.render(scene, camera)
 
     return () => {
-      window.cancelAnimationFrame(animationFrame)
       resizeObserver.disconnect()
       renderer.domElement.removeEventListener('pointerdown', onPointerDown)
       renderer.domElement.removeEventListener('pointermove', onPointerMove)
