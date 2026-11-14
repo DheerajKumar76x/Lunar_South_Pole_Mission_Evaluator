@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import type { LandingSite } from '../data/sites'
+import { getLolaHeightmap, type LolaHeightmap } from '../utils/lolaTerrain'
 
 interface LunarTerrain3DProps {
   site: LandingSite
@@ -12,6 +13,7 @@ interface LunarTerrain3DProps {
 }
 
 const toRadians = (degrees: number) => degrees * Math.PI / 180
+const TERRAIN_VERTICAL_EXAGGERATION = 1
 
 interface Lighting {
   sunAzimuth: number
@@ -37,7 +39,27 @@ export function LunarTerrain3D({ site, sunAzimuth, sunElevation, earthAzimuth, e
   const lightingRef = useRef<Lighting>({ sunAzimuth, sunElevation, earthAzimuth, earthElevation })
   const updateLightingRef = useRef<((lighting: Lighting) => void) | null>(null)
   const [webglMessage, setWebglMessage] = useState('')
+  const [loadedHeightmap, setLoadedHeightmap] = useState<{ siteId: string; heightmap: LolaHeightmap } | null>(null)
+  const [heightmapError, setHeightmapError] = useState('')
+  const heightmap = loadedHeightmap?.siteId === site.id ? loadedHeightmap.heightmap : null
   lightingRef.current = { sunAzimuth, sunElevation, earthAzimuth, earthElevation }
+
+  useEffect(() => {
+    if (site.id === 'custom') {
+      setHeightmapError('')
+      return
+    }
+
+    let active = true
+    setHeightmapError('')
+    getLolaHeightmap(site.id).then((siteHeightmap) => {
+      if (active) setLoadedHeightmap({ siteId: site.id, heightmap: siteHeightmap })
+    }).catch((error: unknown) => {
+      console.error(`Unable to load NASA LOLA terrain for ${site.name}.`, error)
+      if (active) setHeightmapError(error instanceof Error ? error.message : 'Unknown LOLA data error')
+    })
+    return () => { active = false }
+  }, [site.id, site.name])
 
   useEffect(() => {
     const container = containerRef.current
@@ -97,11 +119,33 @@ export function LunarTerrain3D({ site, sunAzimuth, sunElevation, earthAzimuth, e
     const isCrater = !isCustomPlain && /haworth/i.test(site.id)
     const craterScale = isCustomPlain ? 0 : isCrater ? 1 : /malapert/i.test(site.id) ? -0.55 : -0.15
     const baseElevation = THREE.MathUtils.clamp(site.elevationMeters / 5000, -0.45, 1) * 0.5
+    const metersPerWorldUnit = heightmap
+      ? (heightmap.width - 1) * heightmap.resolutionMeters / size
+      : 1
+    const sampleHeightmap = (x: number, z: number) => {
+      if (!heightmap) return 0
+      const sampleX = THREE.MathUtils.clamp((x / size + 0.5) * (heightmap.width - 1), 0, heightmap.width - 1)
+      const sampleY = THREE.MathUtils.clamp((0.5 - z / size) * (heightmap.height - 1), 0, heightmap.height - 1)
+      const x0 = Math.floor(sampleX)
+      const y0 = Math.floor(sampleY)
+      const x1 = Math.min(x0 + 1, heightmap.width - 1)
+      const y1 = Math.min(y0 + 1, heightmap.height - 1)
+      const tx = sampleX - x0
+      const ty = sampleY - y0
+      const at = (column: number, row: number) => heightmap.elevationsMeters[row * heightmap.width + column]
+      const north = THREE.MathUtils.lerp(at(x0, y0), at(x1, y0), tx)
+      const south = THREE.MathUtils.lerp(at(x0, y1), at(x1, y1), tx)
+      return THREE.MathUtils.lerp(north, south, ty)
+    }
     for (let i = 0; i < positions.count; i += 1) {
       const x = positions.getX(i)
       const z = positions.getZ(i)
       const radius = Math.hypot(x, z)
       const azimuth = (Math.atan2(x, z) * 180 / Math.PI + 360) % 360
+      if (heightmap) {
+        positions.setY(i, sampleHeightmap(x, z) * TERRAIN_VERTICAL_EXAGGERATION / metersPerWorldUnit)
+        continue
+      }
       const horizonHeight = isCustomPlain ? 0 : Math.tan(toRadians(interpolateHorizon(azimuth))) * size * 0.32
       const impactCrater = isCustomPlain ? [-1.1, -0.8, -0.55, -0.35].reduce((sum, depth, index) => { const cx=[-4.2,3.4,1.1,-2.1][index], cz=[2.8,-2.5,5.1,-5.3][index], cr=[1.2,1.55,0.8,0.65][index]; const d=Math.hypot(x-cx,z-cz); return sum + depth*Math.exp(-((d/cr)**2)) + 0.22*Math.exp(-(((d-cr*1.35)/(cr*.22))**2)) },0) : 0
       const craterBowl = isCrater ? -2.5 * Math.exp(-((radius / 3.1) ** 2)) + 1.35 * Math.exp(-(((radius - 5.5) / 1.15) ** 2)) : 0
@@ -119,7 +163,7 @@ export function LunarTerrain3D({ site, sunAzimuth, sunElevation, earthAzimuth, e
     wire.position.y = 0.008
     terrainGroup.add(wire)
 
-    const beaconY = baseElevation + (isCrater ? -1.05 : 0.12)
+    const beaconY = heightmap ? sampleHeightmap(0, 0) * TERRAIN_VERTICAL_EXAGGERATION / metersPerWorldUnit : baseElevation + (isCrater ? -1.05 : 0.12)
     const beacon = new THREE.Group()
     beacon.position.set(0, beaconY, 0)
     const beaconStem = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.04, 0.6, 8), new THREE.MeshStandardMaterial({ color: '#dbeafe', emissive: '#22d3ee', emissiveIntensity: 0.35 }))
@@ -144,20 +188,30 @@ export function LunarTerrain3D({ site, sunAzimuth, sunElevation, earthAzimuth, e
     const sunRay = addRay('#f59e0b')
     const earthRay = addRay('#38bdf8')
 
+    const terrainMinimumY = heightmap
+      ? heightmap.minimumRelativeElevationMeters * TERRAIN_VERTICAL_EXAGGERATION / metersPerWorldUnit
+      : 0
+    const terrainMaximumY = heightmap
+      ? heightmap.maximumRelativeElevationMeters * TERRAIN_VERTICAL_EXAGGERATION / metersPerWorldUnit
+      : 0
+    const cameraTargetY = (terrainMinimumY + terrainMaximumY) / 2
+    let distance = heightmap
+      ? Math.max(18, 14 + Math.max(Math.abs(terrainMinimumY), Math.abs(terrainMaximumY)) * 1.1)
+      : 14
     const ground = new THREE.GridHelper(24, 24, '#334155', '#1e293b')
-    ground.position.y = -0.8
+    const terrainFloor = heightmap ? terrainMinimumY - 0.3 : -0.8
+    ground.position.y = Math.min(-0.8, terrainFloor)
     scene.add(ground)
 
     let azimuth = Math.PI / 4
     let polar = 1.05
-    let distance = 14
     let dragging = false
     let previousX = 0
     let previousY = 0
     const updateCamera = () => {
       polar = THREE.MathUtils.clamp(polar, 0.25, Math.PI / 2.05)
-      camera.position.set(distance * Math.sin(polar) * Math.sin(azimuth), distance * Math.cos(polar), distance * Math.sin(polar) * Math.cos(azimuth))
-      camera.lookAt(0, 0, 0)
+      camera.position.set(distance * Math.sin(polar) * Math.sin(azimuth), cameraTargetY + distance * Math.cos(polar), distance * Math.sin(polar) * Math.cos(azimuth))
+      camera.lookAt(0, cameraTargetY, 0)
     }
     const onPointerDown = (event: PointerEvent) => { dragging = true; previousX = event.clientX; previousY = event.clientY; renderer.domElement.setPointerCapture(event.pointerId) }
     const onPointerMove = (event: PointerEvent) => {
@@ -248,7 +302,7 @@ export function LunarTerrain3D({ site, sunAzimuth, sunElevation, earthAzimuth, e
       renderer.forceContextLoss()
       renderer.domElement.remove()
     }
-  }, [site.id, site.lat, site.lon, site.elevationMeters, site.horizonProfile])
+  }, [site.id, site.lat, site.lon, site.elevationMeters, site.horizonProfile, heightmap])
 
   useEffect(() => {
     updateLightingRef.current?.({ sunAzimuth, sunElevation, earthAzimuth, earthElevation })
@@ -257,6 +311,15 @@ export function LunarTerrain3D({ site, sunAzimuth, sunElevation, earthAzimuth, e
   return (
     <div className={`terrain-canvas h-full min-h-[220px] w-full touch-none overflow-hidden ${className ?? ''}`} aria-label={`Interactive 3D lunar terrain for ${site.name}`}>
       <div ref={containerRef} className="terrain-canvas__renderer" />
+      <div className="terrain-disclaimer">
+        {site.id === 'custom'
+          ? 'CUSTOM POSITION · SCHEMATIC TERRAIN'
+          : heightmap
+            ? `NASA LOLA ${heightmap.resolutionMeters}M · TRUE VERTICAL SCALE`
+            : heightmapError
+              ? 'LOLA DEM UNAVAILABLE · SCHEMATIC FALLBACK'
+              : 'LOLA DEM LOADING · 80M'}
+      </div>
       {webglMessage && <div className="terrain-context-message" role="status">{webglMessage}</div>}
     </div>
   )

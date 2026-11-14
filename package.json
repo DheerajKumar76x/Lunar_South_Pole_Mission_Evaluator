@@ -1,6 +1,7 @@
 {
   "name": "initialize-a-react-18-typescript-project",
   "private": true,
+  "license": "MIT",
   "version": "0.0.0",
   "type": "module",
   "scripts": {
@@ -8,7 +9,8 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "fetch:horizons": "python scripts/fetch_jpl.py"
+    "fetch:horizons": "python scripts/fetch_jpl.py",
+    "fetch:lola": "python scripts/fetch_lola.py"
   },
   "dependencies": {
     "@types/three": "^0.187.0",

@@ -33,6 +33,52 @@ const summarizeSite = (site: LandingSite) => {
   }
 }
 
+type SiteSummary = ReturnType<typeof summarizeSite>
+
+function getMissionVerdict(site: LandingSite, summary: SiteSummary, solarLeader: boolean, solarTie: boolean) {
+  if (isPsrIceTrap(site) && summary.continuousPower < 20) {
+    return {
+      tone: 'warning',
+      headline: 'HIGH ICE-TRAP POTENTIAL',
+      detail: summary.comms < 50
+        ? 'Limited sunlight and Earth visibility; relay satellite support may be required.'
+        : 'Limited sunlight; assess surface operations and thermal constraints.',
+    }
+  }
+  if (solarLeader) {
+    return {
+      tone: 'good',
+      headline: summary.continuousPower >= 85
+        ? 'BEST FOR CONTINUOUS SOLAR POWER'
+        : 'BEST SOLAR POWER AVAILABILITY',
+      detail: summary.comms < 50
+        ? `${summary.continuousPower.toFixed(1)}% sunlit samples; limited Earth visibility means relay support may be required.`
+        : `${summary.continuousPower.toFixed(1)}% sunlit samples across the 30-day study.`,
+    }
+  }
+  if (solarTie) {
+    return {
+      tone: 'info',
+      headline: 'SIMILAR SOLAR AVAILABILITY',
+      detail: summary.comms < 50
+        ? 'Sunlit samples are comparable; limited Earth visibility may require relay support.'
+        : 'Sunlit samples are comparable across the 30-day study.',
+    }
+  }
+  if (summary.comms < 50) {
+    return {
+      tone: 'warning',
+      headline: 'LIMITED DIRECT-TO-EARTH LINK',
+      detail: 'Evaluate relay coverage for reliable mission communications.',
+    }
+  }
+  return {
+    tone: 'info',
+    headline: 'LOWER SOLAR AVAILABILITY',
+    detail: 'Compare power storage and operational windows against the alternate site.',
+  }
+}
+
 const formatUtc = (date: Date) => date.toISOString().replace('T', ' ').replace('.000Z', ' UTC')
 
 function App() {
@@ -83,6 +129,11 @@ function App() {
     : siteB
   const summaryA = useMemo(() => summarizeSite(a), [a.lat, a.lon, a.horizonProfile, cacheReady])
   const summaryB = useMemo(() => summarizeSite(b), [b.lat, b.lon, b.horizonProfile, cacheReady])
+  const solarSiteA = summaryA.continuousPower > summaryB.continuousPower
+  const solarSiteB = summaryB.continuousPower > summaryA.continuousPower
+  const solarTie = !solarSiteA && !solarSiteB
+  const verdictA = getMissionVerdict(a, summaryA, solarSiteA, solarTie)
+  const verdictB = getMissionVerdict(b, summaryB, solarSiteB, solarTie)
   const activeSource = cacheError ? 'ANALYTICAL FALLBACK' : cacheReady ? 'JPL DE441 CACHE' : 'LOADING EPHEMERIS'
 
   const exportCsv = () => {
@@ -185,6 +236,10 @@ function App() {
             <ViabilityMetric label="SITE A · SUNLIT SAMPLES" value={`${summaryA.continuousPower.toFixed(1)}%`} detail={`${summaryA.dteHours.toFixed(0)} / 720 DTE hours`} />
             <ViabilityMetric label="SITE B · SUNLIT SAMPLES" value={`${summaryB.continuousPower.toFixed(1)}%`} detail={`${summaryB.dteHours.toFixed(0)} / 720 DTE hours`} />
           </div>
+          <div className="mission-verdicts" aria-label="Plain-language mission assessment">
+            <VerdictBanner site="SITE A" verdict={verdictA} />
+            <VerdictBanner site="SITE B" verdict={verdictB} />
+          </div>
           <div className="delta-strip numeric">
             <span>AVERAGE POWER DELTA (A − B) <b className="accent-amber">{(summaryA.power - summaryB.power).toFixed(2)}%</b></span>
             <span>DTE UPTIME DELTA (A − B) <b className="accent-cyan">{(summaryA.comms - summaryB.comms).toFixed(2)} pp</b></span>
@@ -194,7 +249,7 @@ function App() {
         <aside className="sources-panel">
           <p className="eyebrow">DATA SOURCES &amp; REFERENCES</p>
           <ul>
-            <li><b>Topography &amp; site context:</b> Coordinates and horizon profiles are scenario inputs. Consult <a href="https://quickmap.lroc.asu.edu/" target="_blank" rel="noreferrer">NASA LRO QuickMap</a> and <a href="https://trek.nasa.gov/moon/" target="_blank" rel="noreferrer">NASA Moon Trek / LOLA</a> for lunar mapping and elevation products.</li>
+            <li><b>Topography:</b> Preset 3D terrain uses local 80 m/pixel NASA LRO LOLA patches at true vertical scale; the DEM drives rendered terrain shadows, while analytical visibility still uses each site's horizon profile. Custom positions remain schematic with a flat horizon. See the <a href="https://imbrium.mit.edu/DATA/LOLA_GDR/POLAR/FLOAT_IMG/" target="_blank" rel="noreferrer">LOLA data node</a>, <a href="https://quickmap.lroc.asu.edu/" target="_blank" rel="noreferrer">NASA LRO QuickMap</a>, and <a href="https://trek.nasa.gov/moon/" target="_blank" rel="noreferrer">NASA Moon Trek</a>.</li>
             <li><b>Ephemeris:</b> Preset sites use hourly topocentric vectors from the JPL Horizons cache with interpolation; custom positions use analytical Meeus / principal ELP-2000/82 calculations. Compare with <a href="https://ssd.jpl.nasa.gov/horizons/" target="_blank" rel="noreferrer">NASA JPL Horizons</a>.</li>
           </ul>
         </aside>
@@ -306,7 +361,6 @@ function SiteCard({ label, site, siteId, timestamp, cacheReady, custom, onSelect
 
       <div className="terrain-frame">
         <LunarTerrain3D site={site} sunAzimuth={vectors.sunAzimuth} sunElevation={vectors.sunElevation} earthAzimuth={vectors.earthAzimuth} earthElevation={vectors.earthElevation} />
-        <span className="terrain-disclaimer">SCHEMATIC TERRAIN · NOT A DEM</span>
       </div>
 
       <div className="status-row">
@@ -346,6 +400,19 @@ function ViabilityMetric({ label, value, detail }: { label: string; value: strin
       <strong className="numeric">{value}</strong>
       <span>{detail}</span>
     </div>
+  )
+}
+
+function VerdictBanner({ site, verdict }: {
+  site: string
+  verdict: { tone: string; headline: string; detail: string }
+}) {
+  return (
+    <article className={`verdict-banner verdict-banner--${verdict.tone}`}>
+      <span className="field-label">{site} · MISSION ASSESSMENT</span>
+      <h3>{verdict.headline}</h3>
+      <p>{verdict.detail}</p>
+    </article>
   )
 }
 

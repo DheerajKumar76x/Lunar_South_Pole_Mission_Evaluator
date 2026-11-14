@@ -625,6 +625,57 @@ a:focus-visible {
   text-align: right;
 }
 
+.mission-verdicts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 9px;
+}
+
+.verdict-banner {
+  min-width: 0;
+  padding: 10px 11px;
+  border: 1px solid var(--line);
+  border-left-width: 3px;
+  background: #090d12;
+}
+
+.verdict-banner--good {
+  border-left-color: var(--emerald);
+}
+
+.verdict-banner--warning {
+  border-left-color: var(--red);
+  background: #140d0e;
+}
+
+.verdict-banner--info {
+  border-left-color: var(--amber);
+}
+
+.verdict-banner h3 {
+  margin: 5px 0 3px;
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.045em;
+}
+
+.verdict-banner--good h3 {
+  color: var(--emerald);
+}
+
+.verdict-banner--warning h3 {
+  color: #ff7777;
+}
+
+.verdict-banner p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
 .delta-strip {
   display: flex;
   flex-wrap: wrap;
@@ -918,6 +969,10 @@ a:focus-visible {
 
   .viability-metric {
     grid-template-columns: 1fr;
+  }
+
+  .mission-verdicts {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .viability-metric > span:last-child {

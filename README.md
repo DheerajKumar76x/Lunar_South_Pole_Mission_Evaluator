@@ -74,6 +74,7 @@ src/
 public/
   data/
     horizonsCache.json    # Public hourly JPL Horizons samples for preset sites
+    lolaHeightmaps.json   # Downsampled NASA LOLA terrain patches for preset sites
 ```
 
 ## Getting started
@@ -117,6 +118,18 @@ npm run fetch:horizons
 
 This calls the public JPL Horizons API for the five preset site coordinates and writes `public/data/horizonsCache.json`. The app fetches the file once at startup and keeps samples in memory; custom coordinates and out-of-range times use the analytical fallback.
 
+### Refresh the NASA LOLA terrain patches
+
+Run:
+
+```bash
+npm run fetch:lola
+```
+
+The script extracts 160 × 160 patches at 80 m/pixel around the five preset sites from the LOLA Science Team's south-polar stereographic `LDEM_80S_80M_FLOAT` raster. It uses HTTP byte ranges, so it downloads only the small site patches rather than the 231 MB source raster. The renderer resamples each patch to the device-adaptive terrain mesh; the 3D terrain and its rendered shadows use measured elevations at true vertical scale. The DEM is a visual terrain input; analytical solar/DTE visibility calculations continue to use the site's horizon profile. Custom coordinates remain marked as schematic and use a flat mathematical horizon because no custom-position DEM is included.
+
+LOLA terrain source: [Lunar Orbiter Laser Altimeter data node](https://imbrium.mit.edu/DATA/LOLA_GDR/POLAR/FLOAT_IMG/) and [NASA PDS Geosciences Node](https://pds-geosciences.wustl.edu/missions/lro/lola.htm). The MIT license in this repository applies to the evaluator's software, not NASA/PDS source data.
+
 ### Lint the project
 
 ```bash
@@ -139,7 +152,7 @@ This application is intended for rapid concept analysis, trade studies, and educ
 
 ## License
 
-This project is currently unlicensed unless otherwise specified by the repository owner.
+The evaluator's software is licensed under the [MIT License](./LICENSE). NASA LOLA and JPL Horizons data retain their source attribution and are not relicensed by the software license.
 
 ## Future enhancements
 
