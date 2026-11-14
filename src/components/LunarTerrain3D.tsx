@@ -13,6 +13,18 @@ interface LunarTerrain3DProps {
 
 const toRadians = (degrees: number) => degrees * Math.PI / 180
 
+interface Lighting {
+  sunAzimuth: number
+  sunElevation: number
+  earthAzimuth: number
+  earthElevation: number
+}
+
+interface RayObjects {
+  line: THREE.Line
+  marker: THREE.Mesh
+}
+
 function directionFromAzEl(azimuth: number, elevation: number, length: number) {
   const az = toRadians(azimuth)
   const el = toRadians(elevation)
@@ -22,6 +34,9 @@ function directionFromAzEl(azimuth: number, elevation: number, length: number) {
 
 export function LunarTerrain3D({ site, sunAzimuth, sunElevation, earthAzimuth, earthElevation, className }: LunarTerrain3DProps) {
   const containerRef = useRef<HTMLDivElement>(null)
+  const lightingRef = useRef<Lighting>({ sunAzimuth, sunElevation, earthAzimuth, earthElevation })
+  const updateLightingRef = useRef<((lighting: Lighting) => void) | null>(null)
+  lightingRef.current = { sunAzimuth, sunElevation, earthAzimuth, earthElevation }
 
   useEffect(() => {
     const container = containerRef.current
@@ -105,19 +120,17 @@ export function LunarTerrain3D({ site, sunAzimuth, sunElevation, earthAzimuth, e
 
     const rayGroup = new THREE.Group()
     scene.add(rayGroup)
-    const addRay = (azimuth: number, elevation: number, color: string) => {
-      const start = new THREE.Vector3(0, beaconY + 0.25, 0)
-      const end = start.clone().add(directionFromAzEl(azimuth, elevation, 12))
-      const lineGeometry = new THREE.BufferGeometry().setFromPoints([start, end])
+    const addRay = (color: string): RayObjects => {
+      const lineGeometry = new THREE.BufferGeometry()
       const material = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.9 })
       const line = new THREE.Line(lineGeometry, material)
       rayGroup.add(line)
       const marker = new THREE.Mesh(new THREE.SphereGeometry(0.12, 12, 12), new THREE.MeshBasicMaterial({ color }))
-      marker.position.copy(end)
       rayGroup.add(marker)
+      return { line, marker }
     }
-    addRay(sunAzimuth, sunElevation, '#f59e0b')
-    addRay(earthAzimuth, earthElevation, '#06b6d4')
+    const sunRay = addRay('#f59e0b')
+    const earthRay = addRay('#06b6d4')
 
     const ground = new THREE.GridHelper(24, 24, '#334155', '#1e293b')
     ground.position.y = -0.8
@@ -166,14 +179,26 @@ export function LunarTerrain3D({ site, sunAzimuth, sunElevation, earthAzimuth, e
     renderer.domElement.addEventListener('wheel', onWheel, { passive: true })
     updateCamera()
 
-    const sunDirection = directionFromAzEl(sunAzimuth, sunElevation, 1)
-    sunLight.position.copy(sunDirection).multiplyScalar(10)
     sunLight.target.position.set(0, beaconY, 0)
     scene.add(sunLight.target)
 
-    renderer.render(scene, camera)
+    const updateRay = (ray: RayObjects, azimuth: number, elevation: number) => {
+      const start = new THREE.Vector3(0, beaconY + 0.25, 0)
+      const end = start.clone().add(directionFromAzEl(azimuth, elevation, 12))
+      ray.line.geometry.setFromPoints([start, end])
+      ray.marker.position.copy(end)
+    }
+    const updateLighting = (lighting: Lighting) => {
+      sunLight.position.copy(directionFromAzEl(lighting.sunAzimuth, lighting.sunElevation, 10))
+      updateRay(sunRay, lighting.sunAzimuth, lighting.sunElevation)
+      updateRay(earthRay, lighting.earthAzimuth, lighting.earthElevation)
+      renderer.render(scene, camera)
+    }
+    updateLightingRef.current = updateLighting
+    updateLighting(lightingRef.current)
 
     return () => {
+      updateLightingRef.current = null
       resizeObserver.disconnect()
       renderer.domElement.removeEventListener('pointerdown', onPointerDown)
       renderer.domElement.removeEventListener('pointermove', onPointerMove)
@@ -204,7 +229,11 @@ export function LunarTerrain3D({ site, sunAzimuth, sunElevation, earthAzimuth, e
       renderer.dispose()
       renderer.domElement.remove()
     }
-  }, [site, sunAzimuth, sunElevation, earthAzimuth, earthElevation])
+  }, [site.id, site.lat, site.lon, site.elevationMeters, site.horizonProfile])
+
+  useEffect(() => {
+    updateLightingRef.current?.({ sunAzimuth, sunElevation, earthAzimuth, earthElevation })
+  }, [sunAzimuth, sunElevation, earthAzimuth, earthElevation])
 
   return <div ref={containerRef} className={`h-full min-h-[320px] w-full touch-none overflow-hidden rounded-xl ${className ?? ''}`} aria-label={`Interactive 3D lunar terrain for ${site.name}`} />
 }

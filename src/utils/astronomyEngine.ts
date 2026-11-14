@@ -525,7 +525,9 @@ function evaluate(lat: number, lon: number, timeMs: number, horizonProfile?: rea
 
   // Step 6
   const sunHorizonLimit = interpolateHorizonElevation(horizonProfile, sun.azimuth);
-  const earthHorizonLimit = interpolateHorizonElevation(horizonProfile, earth.azimuth);
+  // Terrain profiles may dip below the observer's horizontal plane; DTE still requires
+  // positive geometric elevation so an Earth direction below 0° is always a blackout.
+  const earthHorizonLimit = Math.max(0, interpolateHorizonElevation(horizonProfile, earth.azimuth));
 
   // Step 7
   const isSunlit = sun.elevation > sunHorizonLimit;
