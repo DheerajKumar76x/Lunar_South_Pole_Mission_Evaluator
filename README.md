@@ -2,6 +2,9 @@
 
 A React + TypeScript lunar mission planning dashboard for comparing candidate landing sites around the Moon's south pole. The app evaluates solar illumination, Earth visibility, terrain constraints, and communications windows to help rapid mission trade studies for lunar polar exploration.
 
+
+# The project :
+https://www.spaceappschallenge.org/2026/find-a-team/the-lunar-navigators/?tab=project
 ## Why this project?
 
 Mission planners and researchers need a fast way to compare candidate south-pole landing sites before committing to deeper analyses. This tool visualizes key environmental constraints over a 30-day mission timeline, including:
