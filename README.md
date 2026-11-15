@@ -1,5 +1,5 @@
 # Lunar South Pole Mission Evaluator
-<img width="485" height="655" alt="Screenshot 2026-11-02 205332" src="https://github.com/user-attachments/assets/b676160b-1c29-4102-a695-94ff002cb3e5" />
+
 
 
 
